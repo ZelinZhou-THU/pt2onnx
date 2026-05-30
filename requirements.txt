@@ -1,0 +1,8 @@
+# pt2onnx-converter dependencies
+# Package licenses:
+#   ultralytics  — AGPL-3.0
+#   torch        — Apache-2.0 / BSD-3-Clause
+#   onnxruntime  — MIT
+torch>=2.0.0
+ultralytics==8.3.162
+onnxruntime>=1.17.0
