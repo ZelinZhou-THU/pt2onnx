@@ -36,6 +36,9 @@ logger = logging.getLogger("pt2onnx")
 # Plugin metadata contract: discovered by ConverterRegistry / cli --list-converters.
 # Keep keys stable; this is the public contract for adding new converter modules
 # (UNet, MMDet, etc.). See NanoAnalyst/.../converter_registry.py.
+#
+# MUST be a literal dict (not dict() constructor or variable concatenation),
+# because cli._discover_converters() parses it via ast.literal_eval().
 CONVERTER_META = {
     "name": "yolov8_seg",
     "display_name": "YOLOv8-seg",
