@@ -25,6 +25,14 @@ Depends on ultralytics (AGPL-3.0). Call via subprocess only; do not import
 into projects with incompatible licenses.
 """
 
+import json
+import logging
+import sys
+import types
+from pathlib import Path
+
+logger = logging.getLogger("pt2onnx")
+
 # Plugin metadata contract: discovered by ConverterRegistry / cli --list-converters.
 # Keep keys stable; this is the public contract for adding new converter modules
 # (UNet, MMDet, etc.). See NanoAnalyst/.../converter_registry.py.
@@ -39,14 +47,6 @@ CONVERTER_META = {
     "supports_dynamic": True,
     "class_name": "YoloConverter",
 }
-
-import json
-import logging
-import sys
-import types
-from pathlib import Path
-
-logger = logging.getLogger("pt2onnx")
 
 
 class YoloConverter:

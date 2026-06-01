@@ -28,7 +28,7 @@ Usage:
 """
 
 import argparse
-import importlib
+import ast
 import importlib.util
 import logging
 import sys
@@ -42,54 +42,53 @@ logging.basicConfig(
 
 
 def _discover_converters() -> dict:
-    """Return {name: CONVERTER_META} for every `*_converter.py` in this dir.
+    """Return {name: {"meta": CONVERTER_META, "file": Path}} for every `*_converter.py`.
 
-    Loads each module via importlib so its CONVERTER_META is parsed, but
-    does NOT instantiate the converter class. This stays cheap because the
-    converter classes import torch/ultralytics lazily inside their methods.
+    Uses AST parsing (``ast.literal_eval``) to read ``CONVERTER_META`` without
+    executing the module. This is the structural guarantee that AGPL imports
+    inside converter modules are never triggered during discovery — even if a
+    future converter author places ``import ultralytics`` at the module top
+    level, discovery stays clean.
 
-    The discovered meta dict gains a private ``_module_file`` key containing
-    the absolute path of the source file. ``_resolve_converter_class`` uses
-    this to avoid reconstructing the path from the converter name, which
-    would break when the file name differs from the converter ``name`` field
-    (e.g. ``yolo_converter.py`` exposes ``name="yolov8_seg"``).
+    The public ``CONVERTER_META`` dict is kept unmodified; the file path is
+    stored separately in a wrapper dict so internal state does not leak into
+    the shared plugin protocol.
     """
     result = {}
     converter_dir = Path(__file__).parent
     for py_file in sorted(converter_dir.glob("*_converter.py")):
         try:
-            spec = importlib.util.spec_from_file_location(py_file.stem, py_file)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            meta = getattr(mod, "CONVERTER_META", None)
-            if meta and "name" in meta:
-                meta["_module_file"] = str(py_file)
-                result[meta["name"]] = meta
+            source = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(py_file))
+            for node in tree.body:
+                if (
+                    isinstance(node, ast.Assign)
+                    and len(node.targets) == 1
+                    and isinstance(node.targets[0], ast.Name)
+                    and node.targets[0].id == "CONVERTER_META"
+                ):
+                    meta = ast.literal_eval(node.value)
+                    if isinstance(meta, dict) and "name" in meta:
+                        result[meta["name"]] = {"meta": meta, "file": py_file}
+                    break
         except Exception as exc:
             logging.getLogger("pt2onnx").warning("Skipping %s: %s", py_file.name, exc)
     return result
 
 
-def _resolve_converter_class(name: str, meta: dict):
+def _resolve_converter_class(name: str, meta: dict, module_file: Path):
     """Load the converter module on demand and return its class.
 
-    Uses CONVERTER_META['class_name'] when present; otherwise falls back to
-    scanning for any class whose name ends with 'Converter'.
+    ``exec_module`` is called here — only when an actual conversion is
+    requested — so AGPL imports happen in the subprocess that already
+    expects them, not during discovery.
 
-    Prefers the ``_module_file`` path stored by ``_discover_converters`` over
-    reconstructing the path from the converter name.
+    Uses ``CONVERTER_META['class_name']`` when present; otherwise falls back
+    to scanning for any class whose name ends with 'Converter'.
     """
-    module_file = meta.get("_module_file")
-    if module_file:
-        module_path = Path(module_file)
-    else:
-        # Fallback: reconstruct from naming convention {name}_converter.py
-        converter_dir = Path(__file__).parent
-        module_name = f"{name.replace('-', '_')}_converter"
-        module_path = converter_dir / f"{module_name}.py"
-    if not module_path.exists():
-        raise FileNotFoundError(f"Converter module not found: {module_path}")
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if not module_file.exists():
+        raise FileNotFoundError(f"Converter module not found: {module_file}")
+    spec = importlib.util.spec_from_file_location(module_file.stem, module_file)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 
@@ -97,13 +96,12 @@ def _resolve_converter_class(name: str, meta: dict):
     if class_name and hasattr(mod, class_name):
         return getattr(mod, class_name)
 
-    # Fallback: pick the first class whose name ends with 'Converter'.
     for attr_name in dir(mod):
         attr = getattr(mod, attr_name)
         if isinstance(attr, type) and attr_name.endswith("Converter"):
             return attr
     raise AttributeError(
-        f"No converter class found in {module_path} "
+        f"No converter class found in {module_file} "
         f"(CONVERTER_META.class_name={class_name!r}, scan for *Converter failed)"
     )
 
@@ -128,44 +126,40 @@ def main() -> None:
     parser.add_argument("--opset", type=int, default=17, help="ONNX opset version (default: 17)")
     parser.add_argument(
         "--dynamic",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="Export with symbolic batch axis for batched inference (default: enabled)",
-    )
-    parser.add_argument(
-        "--no-dynamic",
-        dest="dynamic",
-        action="store_false",
-        help="Fix all dimensions (batch=1) for environments without dynamic axis support",
+        help="Export with symbolic batch axis (default: enabled). Use --no-dynamic to fix all dims.",
     )
     args = parser.parse_args()
 
-    converters = _discover_converters()
+    entries = _discover_converters()
 
     if args.list_converters:
-        for name, meta in converters.items():
-            deps = ", ".join(meta.get("dependencies", []))
+        for name, entry in entries.items():
+            converter_meta = entry["meta"]
+            deps = ", ".join(converter_meta.get("dependencies", []))
             print(
-                f"  {name}: {meta.get('display_name', name)} "
-                f"[deps: {deps}]\n    {meta.get('description', '')}"
+                f"  {name}: {converter_meta.get('display_name', name)} "
+                f"[deps: {deps}]\n    {converter_meta.get('description', '')}"
             )
         return
 
-    # Validate input/output for the actual conversion path
     if not args.input or not args.output:
         parser.error("--input and --output are required (omit --list-converters)")
 
-    if args.converter not in converters:
+    if args.converter not in entries:
         print(
             f"Unknown converter: {args.converter!r}. "
-            f"Available: {sorted(converters.keys())}",
+            f"Available: {sorted(entries.keys())}",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    meta = converters[args.converter]
+    entry = entries[args.converter]
+    converter_meta = entry["meta"]
+    module_file = entry["file"]
     try:
-        converter_class = _resolve_converter_class(args.converter, meta)
+        converter_class = _resolve_converter_class(args.converter, converter_meta, module_file)
     except (FileNotFoundError, AttributeError) as exc:
         logging.getLogger("pt2onnx").error("%s", exc)
         sys.exit(1)
