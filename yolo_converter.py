@@ -25,6 +25,21 @@ Depends on ultralytics (AGPL-3.0). Call via subprocess only; do not import
 into projects with incompatible licenses.
 """
 
+# Plugin metadata contract: discovered by ConverterRegistry / cli --list-converters.
+# Keep keys stable; this is the public contract for adding new converter modules
+# (UNet, MMDet, etc.). See NanoAnalyst/.../converter_registry.py.
+CONVERTER_META = {
+    "name": "yolov8_seg",
+    "display_name": "YOLOv8-seg",
+    "source_formats": [".pt"],
+    "target_format": ".onnx",
+    "dependencies": ["ultralytics", "torch"],
+    "description": "YOLOv8 instance segmentation (.pt \u2192 .onnx)",
+    "default_imgsz": 640,
+    "supports_dynamic": True,
+    "class_name": "YoloConverter",
+}
+
 import json
 import logging
 import sys
