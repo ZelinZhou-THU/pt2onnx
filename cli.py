@@ -23,10 +23,13 @@ Run as a standalone process; do NOT import this module from other applications.
 Usage:
     python cli.py \\
         --input  models/best.pt \\
-        --output models/best.onnx
+        --output models/best.onnx \\
+        --converter yolov8_seg
 """
 
 import argparse
+import ast
+import importlib.util
 import logging
 import sys
 from pathlib import Path
@@ -38,35 +41,132 @@ logging.basicConfig(
 )
 
 
+def _discover_converters() -> dict:
+    """Return {name: {"meta": CONVERTER_META, "file": Path}} for every `*_converter.py`.
+
+    Uses AST parsing (``ast.literal_eval``) to read ``CONVERTER_META`` without
+    executing the module. This is the structural guarantee that AGPL imports
+    inside converter modules are never triggered during discovery — even if a
+    future converter author places ``import ultralytics`` at the module top
+    level, discovery stays clean.
+
+    The public ``CONVERTER_META`` dict is kept unmodified; the file path is
+    stored separately in a wrapper dict so internal state does not leak into
+    the shared plugin protocol.
+    """
+    result = {}
+    converter_dir = Path(__file__).parent
+    for py_file in sorted(converter_dir.glob("*_converter.py")):
+        try:
+            source = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(py_file))
+            for node in tree.body:
+                if (
+                    isinstance(node, ast.Assign)
+                    and len(node.targets) == 1
+                    and isinstance(node.targets[0], ast.Name)
+                    and node.targets[0].id == "CONVERTER_META"
+                ):
+                    meta = ast.literal_eval(node.value)
+                    if isinstance(meta, dict) and "name" in meta:
+                        result[meta["name"]] = {"meta": meta, "file": py_file}
+                    break
+        except Exception as exc:
+            logging.getLogger("pt2onnx").warning("Skipping %s: %s", py_file.name, exc)
+    return result
+
+
+def _resolve_converter_class(name: str, meta: dict, module_file: Path):
+    """Load the converter module on demand and return its class.
+
+    ``exec_module`` is called here — only when an actual conversion is
+    requested — so AGPL imports happen in the subprocess that already
+    expects them, not during discovery.
+
+    Uses ``CONVERTER_META['class_name']`` when present; otherwise falls back
+    to scanning for any class whose name ends with 'Converter'.
+    """
+    if not module_file.exists():
+        raise FileNotFoundError(f"Converter module not found: {module_file}")
+    spec = importlib.util.spec_from_file_location(module_file.stem, module_file)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    class_name = meta.get("class_name")
+    if class_name and hasattr(mod, class_name):
+        return getattr(mod, class_name)
+
+    for attr_name in dir(mod):
+        attr = getattr(mod, attr_name)
+        if isinstance(attr, type) and attr_name.endswith("Converter"):
+            return attr
+    raise AttributeError(
+        f"No converter class found in {module_file} "
+        f"(CONVERTER_META.class_name={class_name!r}, scan for *Converter failed)"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Convert YOLO .pt checkpoint to ONNX (.onnx + .meta.json sidecar)."
+        description="Convert model checkpoint to ONNX (.onnx + .meta.json sidecar)."
     )
-    parser.add_argument("--input", required=True, help="Path to .pt model checkpoint")
-    parser.add_argument("--output", required=True, help="Output .onnx file path")
+    parser.add_argument(
+        "--converter",
+        default="yolov8_seg",
+        help="Converter name (default: yolov8_seg). Use --list-converters to see available.",
+    )
+    parser.add_argument(
+        "--list-converters",
+        action="store_true",
+        help="List all available converters and exit.",
+    )
+    parser.add_argument("--input", help="Path to input model checkpoint (required unless --list-converters)")
+    parser.add_argument("--output", help="Output .onnx file path (required unless --list-converters)")
     parser.add_argument("--imgsz", type=int, default=640, help="Model input resolution in pixels (default: 640)")
     parser.add_argument("--opset", type=int, default=17, help="ONNX opset version (default: 17)")
     parser.add_argument(
         "--dynamic",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="Export with symbolic batch axis for batched inference (default: enabled)",
-    )
-    parser.add_argument(
-        "--no-dynamic",
-        dest="dynamic",
-        action="store_false",
-        help="Fix all dimensions (batch=1) for environments without dynamic axis support",
+        help="Export with symbolic batch axis (default: enabled). Use --no-dynamic to fix all dims.",
     )
     args = parser.parse_args()
 
-    # Make yolo_converter importable regardless of cwd
-    sys.path.insert(0, str(Path(__file__).parent))
-    from yolo_converter import YoloConverter
+    entries = _discover_converters()
+
+    if args.list_converters:
+        for name, entry in entries.items():
+            converter_meta = entry["meta"]
+            deps = ", ".join(converter_meta.get("dependencies", []))
+            print(
+                f"  {name}: {converter_meta.get('display_name', name)} "
+                f"[deps: {deps}]\n    {converter_meta.get('description', '')}"
+            )
+        return
+
+    if not args.input or not args.output:
+        parser.error("--input and --output are required (omit --list-converters)")
+
+    if args.converter not in entries:
+        print(
+            f"Unknown converter: {args.converter!r}. "
+            f"Available: {sorted(entries.keys())}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    entry = entries[args.converter]
+    converter_meta = entry["meta"]
+    module_file = entry["file"]
+    try:
+        converter_class = _resolve_converter_class(args.converter, converter_meta, module_file)
+    except (FileNotFoundError, AttributeError) as exc:
+        logging.getLogger("pt2onnx").error("%s", exc)
+        sys.exit(1)
 
     try:
-        converter = YoloConverter()
-        meta = converter.convert(
+        converter = converter_class()
+        result_meta = converter.convert(
             pt_path=args.input,
             onnx_path=args.output,
             imgsz=args.imgsz,
@@ -77,8 +177,11 @@ def main() -> None:
         logging.getLogger("pt2onnx").error("Conversion failed: %s", exc, exc_info=True)
         sys.exit(1)
 
+    nc = result_meta.get("nc", "?")
+    imgsz = result_meta.get("imgsz", "?")
+    opset = result_meta.get("opset", "?")
     print(
-        f"✓ Export succeeded: nc={meta['nc']}, imgsz={meta['imgsz']}, opset={meta['opset']}\n"
+        f"✓ Export succeeded via {args.converter}: nc={nc}, imgsz={imgsz}, opset={opset}\n"
         f"  Output:  {args.output}\n"
         f"  Metadata: {args.output}.meta.json"
     )
