@@ -47,6 +47,12 @@ def _discover_converters() -> dict:
     Loads each module via importlib so its CONVERTER_META is parsed, but
     does NOT instantiate the converter class. This stays cheap because the
     converter classes import torch/ultralytics lazily inside their methods.
+
+    The discovered meta dict gains a private ``_module_file`` key containing
+    the absolute path of the source file. ``_resolve_converter_class`` uses
+    this to avoid reconstructing the path from the converter name, which
+    would break when the file name differs from the converter ``name`` field
+    (e.g. ``yolo_converter.py`` exposes ``name="yolov8_seg"``).
     """
     result = {}
     converter_dir = Path(__file__).parent
@@ -57,6 +63,7 @@ def _discover_converters() -> dict:
             spec.loader.exec_module(mod)
             meta = getattr(mod, "CONVERTER_META", None)
             if meta and "name" in meta:
+                meta["_module_file"] = str(py_file)
                 result[meta["name"]] = meta
         except Exception as exc:
             logging.getLogger("pt2onnx").warning("Skipping %s: %s", py_file.name, exc)
@@ -68,10 +75,18 @@ def _resolve_converter_class(name: str, meta: dict):
 
     Uses CONVERTER_META['class_name'] when present; otherwise falls back to
     scanning for any class whose name ends with 'Converter'.
+
+    Prefers the ``_module_file`` path stored by ``_discover_converters`` over
+    reconstructing the path from the converter name.
     """
-    converter_dir = Path(__file__).parent
-    module_name = f"{name.replace('-', '_')}_converter"
-    module_path = converter_dir / f"{module_name}.py"
+    module_file = meta.get("_module_file")
+    if module_file:
+        module_path = Path(module_file)
+    else:
+        # Fallback: reconstruct from naming convention {name}_converter.py
+        converter_dir = Path(__file__).parent
+        module_name = f"{name.replace('-', '_')}_converter"
+        module_path = converter_dir / f"{module_name}.py"
     if not module_path.exists():
         raise FileNotFoundError(f"Converter module not found: {module_path}")
     spec = importlib.util.spec_from_file_location(module_name, module_path)
