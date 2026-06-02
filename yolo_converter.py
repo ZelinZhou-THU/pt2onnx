@@ -93,7 +93,7 @@ class YoloConverter:
         pt_path: str,
         onnx_path: str,
         imgsz: int = 640,
-        opset: int = 17,
+        opset: int = 18,
         dynamic: bool = True,
     ) -> dict:
         """Convert best.pt → best.onnx.
