@@ -67,7 +67,7 @@ class TestCLIArguments:
         ):
             cli.main()
             kwargs = mock_cls.return_value.convert.call_args[1]
-            assert kwargs["opset"] == 17
+            assert kwargs["opset"] == 18
 
     def test_dynamic_default_true(self):
         import cli

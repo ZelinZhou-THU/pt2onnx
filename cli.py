@@ -123,7 +123,7 @@ def main() -> None:
     parser.add_argument("--input", help="Path to input model checkpoint (required unless --list-converters)")
     parser.add_argument("--output", help="Output .onnx file path (required unless --list-converters)")
     parser.add_argument("--imgsz", type=int, default=640, help="Model input resolution in pixels (default: 640)")
-    parser.add_argument("--opset", type=int, default=17, help="ONNX opset version (default: 17)")
+    parser.add_argument("--opset", type=int, default=18, help="ONNX opset version (default: 18)")
     parser.add_argument(
         "--dynamic",
         action=argparse.BooleanOptionalAction,
