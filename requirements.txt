@@ -4,7 +4,7 @@
 #   torch        — Apache-2.0 / BSD-3-Clause
 #   onnxruntime  — MIT
 #   onnx         — Apache-2.0
-#   onnx_ir      — MIT
+#   onnx_ir      — Apache-2.0
 #   onnxscript   — MIT
 #   onnxslim     — MIT
 torch>=2.0.0
