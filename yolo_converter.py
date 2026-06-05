@@ -40,12 +40,12 @@ logger = logging.getLogger("pt2onnx")
 # MUST be a literal dict (not dict() constructor or variable concatenation),
 # because cli._discover_converters() parses it via ast.literal_eval().
 CONVERTER_META = {
-    "name": "yolov8_seg",
-    "display_name": "YOLOv8-seg",
+    "name": "yolo_seg",
+    "display_name": "YOLO-seg (v5-v11)",
     "source_formats": [".pt"],
     "target_format": ".onnx",
     "dependencies": ["ultralytics", "torch"],
-    "description": "YOLOv8 instance segmentation (.pt \u2192 .onnx)",
+    "description": "YOLO instance segmentation (v5-v11) (.pt \u2192 .onnx)",
     "default_imgsz": 640,
     "supports_dynamic": True,
     "class_name": "YoloConverter",

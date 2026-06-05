@@ -24,7 +24,7 @@ Usage:
     python cli.py \\
         --input  models/best.pt \\
         --output models/best.onnx \\
-        --converter yolov8_seg
+        --converter yolo_seg
 """
 
 import argparse
@@ -112,8 +112,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--converter",
-        default="yolov8_seg",
-        help="Converter name (default: yolov8_seg). Use --list-converters to see available.",
+        default="yolo_seg",
+        help="Converter name (default: yolo_seg). Use --list-converters to see available.",
     )
     parser.add_argument(
         "--list-converters",
