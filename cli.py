@@ -130,6 +130,11 @@ def main() -> None:
         default=True,
         help="Export with symbolic batch axis (default: enabled). Use --no-dynamic to fix all dims.",
     )
+    parser.add_argument(
+        "--model-type",
+        default=None,
+        help="Model type for converters that need it (e.g. SAM: vit_b/vit_l/vit_h).",
+    )
     args = parser.parse_args()
 
     entries = _discover_converters()
@@ -166,12 +171,17 @@ def main() -> None:
 
     try:
         converter = converter_class()
+        opts = {
+            "imgsz": args.imgsz,
+            "opset": args.opset,
+            "dynamic": args.dynamic,
+        }
+        if args.model_type:
+            opts["model_type"] = args.model_type
         result_meta = converter.convert(
             pt_path=args.input,
             onnx_path=args.output,
-            imgsz=args.imgsz,
-            opset=args.opset,
-            dynamic=args.dynamic,
+            **opts,
         )
     except Exception as exc:
         logging.getLogger("pt2onnx").error("Conversion failed: %s", exc, exc_info=True)
@@ -180,11 +190,19 @@ def main() -> None:
     nc = result_meta.get("nc", "?")
     imgsz = result_meta.get("imgsz", "?")
     opset = result_meta.get("opset", "?")
-    print(
-        f"✓ Export succeeded via {args.converter}: nc={nc}, imgsz={imgsz}, opset={opset}\n"
-        f"  Output:  {args.output}\n"
-        f"  Metadata: {args.output}.meta.json"
-    )
+    variant = result_meta.get("variant", "?")
+    if variant != "?":
+        print(
+            f"✓ Export succeeded via {args.converter}: variant={variant}, opset={opset}\n"
+            f"  Output prefix: {args.output}\n"
+            f"  Metadata: {args.output}.meta.json"
+        )
+    else:
+        print(
+            f"✓ Export succeeded via {args.converter}: nc={nc}, imgsz={imgsz}, opset={opset}\n"
+            f"  Output:  {args.output}\n"
+            f"  Metadata: {args.output}.meta.json"
+        )
 
 
 if __name__ == "__main__":
