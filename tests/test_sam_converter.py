@@ -75,6 +75,7 @@ def test_sam_converter_writes_encoder_decoder_and_meta(monkeypatch, tmp_path):
     assert meta_file.exists()
     parsed = json.loads(meta_file.read_text())
     assert parsed["variant"] == "vit_h"
+    assert parsed["schema"] == "sam"
     assert parsed["encoder_path"].endswith("sam_vit_h_encoder.onnx")
     assert parsed["decoder_path"].endswith("sam_vit_h_decoder.onnx")
     assert parsed["decoder_inputs"] == ["image_embeddings", "point_coords", "point_labels",

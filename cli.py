@@ -34,6 +34,10 @@ import logging
 import sys
 from pathlib import Path
 
+# TODO: consolidate _discover_converters with converter_registry._scan_directory_for_converters
+# They share AST-based CONVERTER_META extraction but diverge in error tolerance.
+# Unify when adding the next converter.
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -133,7 +137,8 @@ def main() -> None:
     parser.add_argument(
         "--model-type",
         default=None,
-        help="Model type for converters that need it (e.g. SAM: vit_b/vit_l/vit_h).",
+        help="Model type (SAM only; ignored by other converters). "
+             "Example: vit_b / vit_l / vit_h.",
     )
     args = parser.parse_args()
 
