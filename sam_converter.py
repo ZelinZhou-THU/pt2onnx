@@ -68,10 +68,15 @@ class SamConverter:
         # ---- encoder ----
         enc_dummy = torch.randn(1, 3, 1024, 1024)
         with torch.no_grad():
+            # dynamo=False: SAM decoder uses data-dependent shape ops
+            # (e.g. `int(prepadded_size[0])` in mask_postprocessing) that the
+            # new torch.export-based path cannot trace. Fall back to the
+            # classic TorchScript exporter which handles them correctly.
             torch.onnx.export(
                 sam.image_encoder, enc_dummy, encoder_out,
                 input_names=["images"], output_names=["image_embeddings"],
                 opset_version=opset, do_constant_folding=True,
+                dynamo=False,
             )
         logger.info("Encoder exported -> %s", encoder_out)
 
@@ -90,6 +95,7 @@ class SamConverter:
         }
         _ = onnx_model(**dummy_inputs)  # trace warmup
         with torch.no_grad():
+            # dynamo=False: see comment above on encoder export.
             torch.onnx.export(
                 onnx_model, tuple(dummy_inputs.values()), decoder_out,
                 input_names=list(dummy_inputs.keys()),
@@ -97,6 +103,7 @@ class SamConverter:
                 opset_version=opset, do_constant_folding=True,
                 dynamic_axes={"point_coords": {1: "num_points"},
                               "point_labels": {1: "num_points"}},
+                dynamo=False,
             )
         logger.info("Decoder exported -> %s", decoder_out)
 
