@@ -60,6 +60,9 @@ class SamConverter:
 
         logger.info("Loading SAM checkpoint: %s (type=%s)", pt_path, model_type)
         sam = sam_model_registry[model_type](checkpoint=pt_path)
+        # CPU export keeps ONNX weights identical across host machines and
+        # avoids CUDA version pin mismatch. Conversion time is acceptable:
+        # ~90s for ViT-H.
         sam.to("cpu").eval()
 
         # ---- encoder ----
@@ -98,6 +101,7 @@ class SamConverter:
         logger.info("Decoder exported -> %s", decoder_out)
 
         meta = {
+            "schema": "sam",  # explicit schema tag for type detection
             "variant": model_type,
             "encoder_path": encoder_out,
             "decoder_path": decoder_out,
