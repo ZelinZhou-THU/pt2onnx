@@ -49,9 +49,14 @@ class SamConverter:
         from segment_anything import sam_model_registry
         from segment_anything.utils.onnx import SamOnnxModel
 
+        pt = Path(pt_path).resolve()
+        if not pt.exists():
+            raise FileNotFoundError(f"SAM checkpoint not found: {pt}")
+
         prefix = onnx_path[:-5] if onnx_path.endswith(".onnx") else onnx_path
         encoder_out = f"{prefix}_encoder.onnx"
         decoder_out = f"{prefix}_decoder.onnx"
+        Path(encoder_out).parent.mkdir(parents=True, exist_ok=True)
 
         logger.info("Loading SAM checkpoint: %s (type=%s)", pt_path, model_type)
         sam = sam_model_registry[model_type](checkpoint=pt_path)

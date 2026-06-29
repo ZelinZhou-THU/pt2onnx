@@ -57,6 +57,7 @@ def test_sam_converter_writes_encoder_decoder_and_meta(monkeypatch, tmp_path):
     calls = _install_fakes(monkeypatch, tmp_path)
     from sam_converter import SamConverter
 
+    (tmp_path / "ckpt.pth").write_bytes(b"FAKE_CHECKPOINT")
     prefix = str(tmp_path / "sam_vit_h")
     meta = SamConverter().convert(
         pt_path=str(tmp_path / "ckpt.pth"),
@@ -85,7 +86,8 @@ def test_sam_converter_writes_encoder_decoder_and_meta(monkeypatch, tmp_path):
 def test_sam_converter_strips_onnx_suffix_from_prefix(monkeypatch, tmp_path):
     _install_fakes(monkeypatch, tmp_path)
     from sam_converter import SamConverter
-    SamConverter().convert(pt_path="x.pth", onnx_path=str(tmp_path / "out.onnx"),
+    (tmp_path / "x.pth").write_bytes(b"FAKE")
+    SamConverter().convert(pt_path=str(tmp_path / "x.pth"), onnx_path=str(tmp_path / "out.onnx"),
                            model_type="vit_b", opset=17)
     assert (tmp_path / "out_encoder.onnx").exists()
     assert (tmp_path / "out_decoder.onnx").exists()
