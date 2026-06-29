@@ -117,3 +117,26 @@ class TestCLIArguments:
         ):
             cli.main()
         assert exc_info.value.code == 1
+
+    def test_list_converters_includes_sam_and_yolo(self, capsys):
+        import cli
+        with patch.object(sys, "argv", ["cli.py", "--list-converters"]):
+            cli.main()
+        out = capsys.readouterr().out
+        assert "yolo_seg" in out
+        assert "sam" in out
+
+    def test_model_type_passed_through(self):
+        import cli
+        p, mock_cls = _mock_resolver({"variant": "vit_h", "opset": 17})
+        with (
+            patch.object(sys, "argv", ["cli.py", "--converter", "sam",
+                                       "--input", "x.pth", "--output", "out",
+                                       "--model-type", "vit_h"]),
+            p,
+        ):
+            cli.main()
+        kwargs = mock_cls.return_value.convert.call_args[1]
+        assert kwargs["model_type"] == "vit_h"
+        assert kwargs["pt_path"] == "x.pth"
+        assert kwargs["onnx_path"] == "out"

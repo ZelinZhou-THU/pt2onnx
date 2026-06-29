@@ -95,6 +95,7 @@ class YoloConverter:
         imgsz: int = 640,
         opset: int = 18,
         dynamic: bool = True,
+        **opts,
     ) -> dict:
         """Convert best.pt → best.onnx.
 
