@@ -38,6 +38,13 @@ from pathlib import Path
 # They share AST-based CONVERTER_META extraction but diverge in error tolerance.
 # Unify when adding the next converter.
 
+# Force UTF-8 stdout/stderr — torch.onnx prints emoji (e.g. \u2705) that
+# GBK (Windows zh-CN default locale) cannot encode, causing UnicodeEncodeError.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
