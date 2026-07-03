@@ -7,7 +7,7 @@
 #   onnx_ir      — Apache-2.0
 #   onnxscript   — MIT
 #   onnxslim     — MIT
-torch>=2.0.0
+torch>=2.4.0
 ultralytics==8.3.162
 segment-anything>=1.0
 onnxruntime>=1.17.0

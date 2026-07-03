@@ -93,8 +93,8 @@ class SamConverter:
             "has_mask_input": torch.tensor([1], dtype=torch.float),
             "orig_im_size": torch.tensor([1500, 2250], dtype=torch.float),
         }
-        _ = onnx_model(**dummy_inputs)  # trace warmup
         with torch.no_grad():
+            _ = onnx_model(**dummy_inputs)  # trace warmup
             # dynamo=False: see comment above on encoder export.
             torch.onnx.export(
                 onnx_model, tuple(dummy_inputs.values()), decoder_out,

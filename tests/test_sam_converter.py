@@ -69,6 +69,7 @@ def test_sam_converter_writes_encoder_decoder_and_meta(monkeypatch, tmp_path):
     exported = {Path(c["path"]).name for c in calls["export"]}
     assert "sam_vit_h_encoder.onnx" in exported
     assert "sam_vit_h_decoder.onnx" in exported
+    assert all(c.get("dynamo") is False for c in calls["export"])
     assert (tmp_path / "sam_vit_h_encoder.onnx").read_bytes() == b"FAKE_ONNX"
     assert (tmp_path / "sam_vit_h_decoder.onnx").exists()
     meta_file = tmp_path / "sam_vit_h.meta.json"
