@@ -15,6 +15,7 @@ def _install_fakes(monkeypatch, tmp_path):
         def __exit__(self, *a): return False
     fake_torch.no_grad = lambda: _Ctx()
     fake_torch.randn = lambda *shape, **kw: ("randn", shape)
+    fake_torch.rand = lambda *shape, **kw: ("rand", shape)
     fake_torch.tensor = lambda x, dtype=None: ("tensor", x)
     fake_torch.randint = lambda low, high, size, **kw: ("randint", size)
     fake_torch.float = "float32"
