@@ -58,6 +58,10 @@ class SamConverter:
         decoder_out = f"{prefix}_decoder.onnx"
         Path(encoder_out).parent.mkdir(parents=True, exist_ok=True)
 
+        valid_types = tuple(sam_model_registry.keys())
+        if model_type not in valid_types:
+            raise ValueError(
+                f"Invalid model_type {model_type!r}; expected one of {valid_types}")
         logger.info("Loading SAM checkpoint: %s (type=%s)", pt_path, model_type)
         sam = sam_model_registry[model_type](checkpoint=pt_path)
         # CPU export keeps ONNX weights identical across host machines and
@@ -87,8 +91,8 @@ class SamConverter:
         mask_in_size = [4 * x for x in embed_size]
         dummy_inputs = {
             "image_embeddings": torch.randn(1, embed_dim, *embed_size, dtype=torch.float),
-            "point_coords": torch.randint(0, 1024, (1, 5, 2), dtype=torch.float),
-            "point_labels": torch.randint(0, 4, (1, 5), dtype=torch.float),
+            "point_coords": torch.rand(1, 5, 2, dtype=torch.float) * 1024,
+            "point_labels": torch.rand(1, 5, dtype=torch.float) * 4,
             "mask_input": torch.randn(1, 1, *mask_in_size, dtype=torch.float),
             "has_mask_input": torch.tensor([1], dtype=torch.float),
             "orig_im_size": torch.tensor([1500, 2250], dtype=torch.float),
@@ -120,5 +124,5 @@ class SamConverter:
             "source_pt": str(pt_path),
         }
         Path(f"{prefix}.meta.json").write_text(
-            json.dumps(meta, indent=2, ensure_ascii=False))
+            json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
         return meta
