@@ -31,7 +31,10 @@ CONVERTER_META = {
     "display_name": "SAM (Segment Anything)",
     "source_formats": [".pth"],
     "target_format": ".onnx",
-    "dependencies": ["segment_anything", "torch"],
+    "dependencies": [
+        "segment_anything", "torch",
+        "onnx", "onnxruntime", "onnxscript", "onnxslim", "onnx_ir",
+    ],
     "description": "Segment Anything ViT-B/L/H (.pth -> encoder+decoder ONNX)",
     "default_imgsz": 1024,
     "supports_dynamic": False,

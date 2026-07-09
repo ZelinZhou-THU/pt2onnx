@@ -44,7 +44,10 @@ CONVERTER_META = {
     "display_name": "YOLO-seg (v5-v11)",
     "source_formats": [".pt"],
     "target_format": ".onnx",
-    "dependencies": ["ultralytics", "torch"],
+    "dependencies": [
+        "ultralytics", "torch",
+        "onnx", "onnxruntime", "onnxscript", "onnxslim", "onnx_ir",
+    ],
     "description": "YOLO instance segmentation (v5-v11) (.pt \u2192 .onnx)",
     "default_imgsz": 640,
     "supports_dynamic": True,
